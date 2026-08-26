@@ -991,40 +991,49 @@ function Find-MCO3DSetup {
 }
 
 function Set-AppCompatLayer {
-    param([Parameter(Mandatory)][string]$ExePath)
+    param(
+        [Parameter(Mandatory)][string]$ExePath,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$LayerValue
+    )
 
-    $layerValue = '~ WIN7RTM RUNASADMIN'
     $subKey = 'Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers'
 
-    # Current user setting - equivalent to the Compatibility tab.
-    $cu = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($subKey)
-    try {
-        $cu.SetValue($ExePath, $layerValue, [Microsoft.Win32.RegistryValueKind]::String)
-    }
-    finally {
-        $cu.Close()
+    foreach ($registryRoot in @(
+        [Microsoft.Win32.Registry]::CurrentUser,
+        [Microsoft.Win32.Registry]::LocalMachine
+    )) {
+        $key = $registryRoot.CreateSubKey($subKey)
+        try {
+            if ([string]::IsNullOrWhiteSpace($LayerValue)) {
+                $key.DeleteValue($ExePath, $false)
+            }
+            else {
+                $key.SetValue($ExePath, $LayerValue, [Microsoft.Win32.RegistryValueKind]::String)
+            }
+        }
+        finally {
+            $key.Close()
+        }
     }
 
-    # Also set the all-users/local-machine layer because this installer is elevated.
-    $lm = [Microsoft.Win32.Registry]::LocalMachine.CreateSubKey($subKey)
-    try {
-        $lm.SetValue($ExePath, $layerValue, [Microsoft.Win32.RegistryValueKind]::String)
+    if ([string]::IsNullOrWhiteSpace($LayerValue)) {
+        Write-Log "Compatibility settings cleared: $ExePath"
     }
-    finally {
-        $lm.Close()
+    else {
+        Write-Log "Compatibility set: $ExePath -> $LayerValue"
     }
-
-    Write-Log "Compatibility set: $ExePath -> Windows 7 + Run as administrator"
 }
 
 function Set-MCOCompatibility {
     param(
         [Parameter(Mandatory)][string]$MCityPath,
-        [Parameter(Mandatory)][string]$LauncherPath
+        [Parameter(Mandatory)][string]$LauncherPath,
+        [Parameter(Mandatory)][bool]$LauncherRunAsAdmin
     )
 
-    Set-AppCompatLayer -ExePath $MCityPath
-    Set-AppCompatLayer -ExePath $LauncherPath
+    # Remove settings written by older installer versions, including WIN7RTM.
+    Set-AppCompatLayer -ExePath $MCityPath -LayerValue ''
+    Set-AppCompatLayer -ExePath $LauncherPath -LayerValue $(if ($LauncherRunAsAdmin) { '~ RUNASADMIN' } else { '' })
 }
 
 function Install-TrustedRootCertificate {
@@ -1118,7 +1127,8 @@ function Save-InstallReceipt {
         [Parameter(Mandatory)][string]$InstallDir,
         [Parameter(Mandatory)]$Certificate,
         [Parameter(Mandatory)][string]$MCityPath,
-        [Parameter(Mandatory)][string]$LauncherPath
+        [Parameter(Mandatory)][string]$LauncherPath,
+        [Parameter(Mandatory)][bool]$LauncherRunAsAdmin
     )
 
     New-Item -ItemType Directory -Path $Script:ReceiptRoot -Force | Out-Null
@@ -1130,7 +1140,7 @@ function Save-InstallReceipt {
         InstallDir       = $InstallDir
         MCityPath        = $MCityPath
         LauncherPath     = $LauncherPath
-        Compatibility    = '~ WIN7RTM RUNASADMIN'
+        Compatibility    = $(if ($LauncherRunAsAdmin) { 'Launcher: ~ RUNASADMIN' } else { 'None' })
         CertificateStore = 'LocalMachine\Root'
         CertThumbprint   = $Certificate.Thumbprint
         CertSubject      = $Certificate.Subject
@@ -1249,8 +1259,14 @@ try {
     $mcityPath = Find-MCOExecutable -InstallDir $InstallDir -FileName 'mcity.exe'
     $launcherPath = Find-MCOExecutable -InstallDir $InstallDir -FileName 'mco-launcher.exe'
 
-    Write-Host '[9/9] Setting compatibility, icon, shortcuts, and preparing 3D Setup...' -ForegroundColor Green
-    Set-MCOCompatibility -MCityPath $mcityPath -LauncherPath $launcherPath
+    Write-Host '[9/9] Configuring launcher options, icon, shortcuts, and preparing 3D Setup...' -ForegroundColor Green
+    Write-Host ''
+    $adminChoice = Read-Host 'Always run the MCO Launcher as Administrator? This is optional [y/N]'
+    $launcherRunAsAdmin = $adminChoice.Trim() -match '^(?i:y|yes)$'
+    Set-MCOCompatibility `
+        -MCityPath $mcityPath `
+        -LauncherPath $launcherPath `
+        -LauncherRunAsAdmin $launcherRunAsAdmin
 
     $packageIcon = Join-Path $Root 'mcity.ico'
     $installedIcon = Join-Path $InstallDir 'mcity.ico'
@@ -1272,7 +1288,8 @@ try {
         -InstallDir $InstallDir `
         -Certificate $certificate `
         -MCityPath $mcityPath `
-        -LauncherPath $launcherPath
+        -LauncherPath $launcherPath `
+        -LauncherRunAsAdmin $launcherRunAsAdmin
 
     $setup3DPath = Find-MCO3DSetup -InstallDir $InstallDir
 
@@ -1280,9 +1297,14 @@ try {
     Write-Host 'MCO INSTALLATION COMPLETE' -ForegroundColor Cyan
     Write-Host "Installed to: $InstallDir"
     Write-Host ''
-    Write-Host 'Compatibility:' -ForegroundColor Green
-    Write-Host '  mcity.exe        -> Windows 7 + Run as administrator'
-    Write-Host '  mco-launcher.exe -> Windows 7 + Run as administrator'
+    Write-Host 'Launcher privilege setting:' -ForegroundColor Green
+    if ($launcherRunAsAdmin) {
+        Write-Host '  mco-launcher.exe -> Always run as administrator (user selected)'
+    }
+    else {
+        Write-Host '  mco-launcher.exe -> Run normally'
+    }
+    Write-Host '  Windows 7 compatibility mode is not enabled.'
     Write-Host ''
     Write-Host 'Certificate location:' -ForegroundColor Green
     Write-Host '  Local Computer -> Trusted Root Certification Authorities'
@@ -1316,8 +1338,7 @@ try {
 
     Start-Process `
         -FilePath $launcherPath `
-        -WorkingDirectory (Split-Path -Parent $launcherPath) `
-        -Verb RunAs
+        -WorkingDirectory (Split-Path -Parent $launcherPath)
 
     [void](Read-Host 'MCO Launcher has been started. Press ENTER to close this installer')
 }

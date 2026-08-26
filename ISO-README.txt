@@ -73,15 +73,9 @@ The rebuilt installer performs the following primary tasks:
        Local Computer
        Trusted Root Certification Authorities
 
-  7. Configures:
-
-       mcity.exe
-       mco-launcher.exe
-
-     for:
-
-       Windows 7 compatibility mode
-       Run as Administrator
+  7. Offers an optional choice to always run mco-launcher.exe as
+     Administrator. This is disabled by default. Windows 7 compatibility
+     mode is not enabled.
 
   8. Creates Motor City Online Desktop and Start Menu shortcuts pointing to:
 
@@ -114,7 +108,7 @@ After the core installation is complete:
   Installer waits for 3D Setup to close
           |
           v
-  mco-launcher.exe starts automatically as Administrator
+  mco-launcher.exe starts automatically
 
 The normal Desktop and Start Menu shortcuts continue to launch
 mco-launcher.exe for future use.
