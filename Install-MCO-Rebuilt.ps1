@@ -1016,12 +1016,11 @@ function Set-AppCompatLayer {
         }
     }
 
-    if ([string]::IsNullOrWhiteSpace($LayerValue)) {
-        Write-Log "Compatibility settings cleared: $ExePath"
-    }
-    else {
-        Write-Log "Compatibility set: $ExePath -> $LayerValue"
-    }
+    Write-Log $(if ([string]::IsNullOrWhiteSpace($LayerValue)) {
+        "Compatibility settings cleared: $ExePath"
+    } else {
+        "Compatibility set: $ExePath -> $LayerValue"
+    })
 }
 
 function Set-MCOCompatibility {
@@ -1031,7 +1030,7 @@ function Set-MCOCompatibility {
         [Parameter(Mandatory)][bool]$LauncherRunAsAdmin
     )
 
-    # Remove settings written by older installer versions, including WIN7RTM.
+    # Clear settings from older installer versions, including Windows 7 mode.
     Set-AppCompatLayer -ExePath $MCityPath -LayerValue ''
     Set-AppCompatLayer -ExePath $LauncherPath -LayerValue $(if ($LauncherRunAsAdmin) { '~ RUNASADMIN' } else { '' })
 }
@@ -1173,6 +1172,8 @@ try {
     Write-Host '============================================================' -ForegroundColor Cyan
     Write-Host '                    MCO New Age Install' -ForegroundColor Cyan
     Write-Host '                    Packaged by EAO_Lix' -ForegroundColor Cyan
+    Write-Host '          Packaged with Update 16 Version 1.0.151' -ForegroundColor Cyan
+    Write-Host '                       24 Aug 2026' -ForegroundColor Cyan
     Write-Host '       Giving back to the community that has given so much' -ForegroundColor Cyan
     Write-Host '============================================================' -ForegroundColor Cyan
     Write-Host ''
@@ -1260,9 +1261,15 @@ try {
     $launcherPath = Find-MCOExecutable -InstallDir $InstallDir -FileName 'mco-launcher.exe'
 
     Write-Host '[9/9] Configuring launcher options, icon, shortcuts, and preparing 3D Setup...' -ForegroundColor Green
-    Write-Host ''
-    $adminChoice = Read-Host 'Always run the MCO Launcher as Administrator? This is optional [y/N]'
-    $launcherRunAsAdmin = $adminChoice.Trim() -match '^(?i:y|yes)$'
+    Add-Type -AssemblyName PresentationFramework
+    $adminChoice = [System.Windows.MessageBox]::Show(
+        "Would you like the MCO Launcher to always run as Administrator?`n`nThis is optional and is not required for the game to launch.",
+        'MCO Launcher - Administrator Option',
+        [System.Windows.MessageBoxButton]::YesNo,
+        [System.Windows.MessageBoxImage]::Question,
+        [System.Windows.MessageBoxResult]::No
+    )
+    $launcherRunAsAdmin = $adminChoice -eq [System.Windows.MessageBoxResult]::Yes
     Set-MCOCompatibility `
         -MCityPath $mcityPath `
         -LauncherPath $launcherPath `
@@ -1298,12 +1305,11 @@ try {
     Write-Host "Installed to: $InstallDir"
     Write-Host ''
     Write-Host 'Launcher privilege setting:' -ForegroundColor Green
-    if ($launcherRunAsAdmin) {
-        Write-Host '  mco-launcher.exe -> Always run as administrator (user selected)'
-    }
-    else {
-        Write-Host '  mco-launcher.exe -> Run normally'
-    }
+    Write-Host $(if ($launcherRunAsAdmin) {
+        '  mco-launcher.exe -> Always run as administrator (user selected)'
+    } else {
+        '  mco-launcher.exe -> Run normally'
+    })
     Write-Host '  Windows 7 compatibility mode is not enabled.'
     Write-Host ''
     Write-Host 'Certificate location:' -ForegroundColor Green
@@ -1314,7 +1320,6 @@ try {
     Write-Host "Install log: $Script:LogPath" -ForegroundColor DarkGray
     Write-Host ''
 
-    Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show(
         "MCO installation is complete.`n`nThe Widescreen Hack / Movie Skip was NOT installed.`n`nIt is available in the Optional folder if you want to apply it.",
         "MCO New Age Install - Optional Widescreen",

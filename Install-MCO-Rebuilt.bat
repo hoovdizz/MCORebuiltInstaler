@@ -1,11 +1,11 @@
 @echo off
 setlocal
-title Motor City Online Rebuilt Uninstaller v0.9
+title MCO New Age Install v0.9
 
-set "SCRIPT=%~dp0Uninstall-MCO-Rebuilt.ps1"
+set "SCRIPT=%~dp0Install-MCO-Rebuilt.ps1"
 
 if not exist "%SCRIPT%" (
-    echo ERROR: Uninstall-MCO-Rebuilt.ps1 was not found.
+    echo ERROR: Install-MCO-Rebuilt.ps1 was not found.
     pause
     exit /b 1
 )
